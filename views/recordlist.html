@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High Scores</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id = "container">
+        <h1>Record List</h1>
+        <nav>
+            <a href="index.html">Record Entry</a>
+            <a href="#">Record List</a>
+        </nav>
+        <script>
+            fetch('/getData').then(function(records){//fetch Request
+                records.json().then(function(therecords){
+                    //console.log(therecords);//will read what is in database
+                    
+                    for(let record of therecords.record){
+                        
+                    }
+                    for(let record of therecords.record){//constant
+                        var recordElement = document.createElement('p')//html tags are elements
+                        
+                        recordElement.innerHTML = record.name + ", " + record.score + " ";//record.record is entry in for loop
+                        document.getElementById('container').appendChild(recordElement)//add child (record element) to document
+                    
+                        //add a delete button (not required)
+                        var deleteBtn = document.createElement('button');
+                        deleteBtn.innerText = 'Delete';
+                        deleteBtn.addEventListener('click', function deleteRecord(){//event listener for delete button
+                            location.reload();//reload page to showcase deleted data
+                            fetch('/deleteRecord',{//fetch request {what particular item}
+                                method:"POST",
+                                headers:{
+                                    "Content-Type":"application/json"
+                                },
+                                body:JSON.stringify({//send data to body to delete entry
+                                    _id:record._id
+                                })
+                            });
+                        })
+                        
+                        recordElement.appendChild(deleteBtn);
+                    }
+                })
+            });
+        </script>
+    </div>
+</body>
+</html>
