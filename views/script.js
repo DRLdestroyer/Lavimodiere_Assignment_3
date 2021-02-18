@@ -1,3 +1,5 @@
+//var socket = io();//!how to implement w/out errors?
+
 var c = document.querySelector("canvas");
 var ctx = c.getContext("2d");
 var timer = requestAnimationFrame(main);
@@ -9,8 +11,9 @@ var score = 0;
 var gameStates = [];
 var currentState = 0;
 var ship;
+var ship2;
 var highScore = 0;
-console.log("highscore reset");
+//console.log("highscore reset");
 var bgMain = new Image();
 var cookieSprite = new Image();
 var highScoreElements = document.querySelector('.highscore');
@@ -50,14 +53,13 @@ function Asteroids(){
         ctx.fill();*/
         ctx.drawImage(cookieSprite,this.x - this.radius,this.y-this.radius,this.radius*2, this.radius*2)
         ctx.restore();
-
     }
 }
 
 
 
 //class for player ship
-function PlayerShip(){
+function PlayerShip(color){
     this.x = c.width/2;
     this.y = c.height/2;
     this.w = 20;
@@ -68,6 +70,7 @@ function PlayerShip(){
     this.left = false;
     this.right = false;
     this.flamelength = 30;
+    this.dead = false;
 
     this.draw = function(){
         ctx.save();
@@ -94,7 +97,7 @@ function PlayerShip(){
             ctx.restore();
         }
         ctx.beginPath();
-        ctx.fillStyle = "red";
+        ctx.fillStyle = color;
         ctx.moveTo(0, -10);
         ctx.lineTo(10, 10);
         ctx.lineTo(-10, 10);
@@ -139,7 +142,19 @@ function gameStart() {
         asteroids[i] = new Asteroids();
     }
     //this creates an instance of the ship
-    ship = new PlayerShip();
+    ship = new PlayerShip("blue");//p1 is blue
+    //custom attributes for p1
+    
+    ship2 = new PlayerShip("red");//p2 is red
+    //custom attributes for p2
+    ship2.up = true;//!added to temporarily separate players
+    //!Note:P2 works properly, but is under P1
+
+    // //connect to server
+    // socket.on('connected', function(data){
+    //     clientId = data;
+    //     console.log(clientId);
+    // })
 }
 
 
@@ -151,6 +166,7 @@ document.addEventListener("keyup", keyPressUp);
 function keyPressUp(e){
   //  console.log("Key released " + e.keyCode);
     if(gameOver == false){
+        //p1
         if(e.keyCode === 38){
             ship.up = false;
         }
@@ -160,6 +176,16 @@ function keyPressUp(e){
         if(e.keyCode === 39){
             ship.right = false;
         }
+        //p2
+        if(e.keyCode === 38){
+            ship2.up = false;
+        }
+        if(e.keyCode === 37){
+            ship2.left = false;
+        }
+        if(e.keyCode === 39){
+            ship2.right = false;
+        }
     }
     
 }
@@ -167,15 +193,31 @@ function keyPressUp(e){
 function keyPressDown(e){
     //console.log("Key pressed " + e.keyCode);
     if(gameOver == false){
+        //p1
         if(e.keyCode === 38){
             ship.up = true;
         }
-
         if(e.keyCode === 37){
             ship.left = true;
         }
         if(e.keyCode === 39){
             ship.right = true;
+        }
+        if(e.keyCode === 38){
+            ship.up = true;
+        }
+        //p2
+        if(e.keyCode === 38){
+            ship2.up = true;
+        }
+        if(e.keyCode === 37){
+            ship2.left = true;
+        }
+        if(e.keyCode === 39){
+            ship2.right = true;
+        }
+        if(e.keyCode === 38){
+            ship2.up = true;
         }
     }
     if (gameOver == true) {
@@ -201,6 +243,47 @@ function keyPressDown(e){
     }
 }
 
+// //keypress for server//!
+// //event listeners for controls
+// document.addEventListener('keydown', keyPressDown)//keydown
+// document.addEventListener('keyup', keyPressUp)//key up
+// function keyPressDown(e) {//recieve event from event handler
+//     if (e.keyCode === 68)//right//diagonal movement from else ifs
+//         socket.emit('keypress', { inputId: 'right', state: true })
+//     else if (e.keyCode === 65)//left
+//         socket.emit('keypress', { inputId: 'left', state: true })
+//     else if (e.keyCode === 87)//up
+//         socket.emit('keypress', { inputId: 'up', state: true })
+//     else if (e.keyCode === 83)//down
+//         socket.emit('keypress', { inputId: 'down', state: true })
+// }
+// function keyPressUp(e) {//recieve event from event handler
+//     if (e.keyCode === 68)//right//diagonal movement from else ifs
+//         socket.emit('keypress', { inputId: 'right', state: false })
+//     else if (e.keyCode === 65)//left
+//         socket.emit('keypress', { inputId: 'left', state: false })
+//     else if (e.keyCode === 87)//up
+//         socket.emit('keypress', { inputId: 'up', state: false })
+//     else if (e.keyCode === 83)//down
+//         socket.emit('keypress', { inputId: 'down', state: false })
+// }
+// socket.on('newPositions', function (data) {
+//     //data = new package we are sending
+//     //loop through objects within data
+//     ctx.clearRect(0, 0, canvas.width, canvas.height);
+//     for (var i = 0; i < data.player.length; i++) {
+//         if(clientId == data.player[i].id){
+//             px = data.player[i].x;
+//             py = data.player[i].y;
+//         }
+//         ctx.fillText(data.player[i].number, data.player[i].x, data.player[i].y);
+//     }
+//     for (var i = 0; i < data.bullet.length; i++) {
+//         ctx.fillRect(data.bullet[i].x + 5, data.bullet[i].y - 10,10,10);
+//     }
+// })
+
+
 //GameStates state machine. This is what sets up menu screens and main game scene
 
 //---Main Menu---
@@ -211,7 +294,7 @@ gameStates[0] = function(){
     ctx.font = "30px Arial";
     ctx.fillStyle = "white";
     ctx.textAlign = "center"
-    ctx.fillText("Asteroid Avoidance", c.width/2, c.height/2 - 30);
+    ctx.fillText("Asteroid Avoidance: 2 Player Edition", c.width/2, c.height/2 - 30);
     ctx.font = "15px Arial";
     ctx.fillText("Press Enter to Start", c.width/2, c.height/2 + 20);
     ctx.restore();
@@ -230,32 +313,69 @@ gameStates[1] = function(){
     //ship.vy += gravity;
 
     //Key presses move the ship
-    if(ship.up == true){
+    //p1
+    if(ship.dead == false){
+        if(ship.up == true){
         ship.vy = -10;
+        }
+        else{
+            ship.vy = 3;
+        }
+
+        if(ship.left == true){
+            ship.vx = -3;
+        }
+        else if(ship.right == true){
+            ship.vx = 3;
+        }
+        else{
+            ship.vx = 0;
+        }
     }
-    else{
-        ship.vy = 3;
+    
+    //p2
+    if(ship2.dead == false){
+        if(ship2.up == true){
+            ship2.vy = -10;
+        }
+        else{
+            ship2.vy = 3;
+        }
+    
+        if(ship2.left == true){
+            ship2.vx = -3;
+        }
+        else if(ship2.right == true){
+            ship2.vx = 3;
+        }
+        else{
+            ship2.vx = 0;
+        }
     }
 
-    if(ship.left == true){
-        ship.vx = -3;
-    }
-    else if(ship.right == true){
-        ship.vx = 3;
-    }
-    else{
-        ship.vx = 0;
-    }
     // loops through asteroid instances in array and draws them to the screen
     for(var i = 0; i<asteroids.length; i++){
+        //p1
         var dX = ship.x - asteroids[i].x;
         var dY = ship.y - asteroids[i].y;
         var dist = Math.sqrt((dX*dX)+(dY*dY));
+        //p2
+        var dX2 = ship2.x - asteroids[i].x;
+        var dY2 = ship2.y - asteroids[i].y;
+        var dist2 = Math.sqrt((dX2*dX2)+(dY2*dY2));
 
         //checks for collision between asteroid and ship
         if(detectCollision(dist, (ship.h/2 + asteroids[i].radius))){
-           // console.log("Colliding with asteroid " + i);
-            
+           ship.dead = true;
+        }
+
+        if(detectCollision(dist2, (ship2.h/2 + asteroids[i].radius))){
+            ship2.dead = true;
+        }
+
+        if (ship.dead == true && ship2.dead == true){
+            // console.log("Colliding with asteroid " + i);
+             
             currentState = 2;
             gameOver = true;
             //document.removeEventListener("keydown", keyPressDown);
@@ -275,9 +395,13 @@ gameStates[1] = function(){
         asteroids[i].draw();
     }
     
-    ship.draw();
+    //drawing is a queue
+    if(ship2.dead == false)ship2.draw();
+    if(ship.dead == false)ship.draw();
+    
     if(gameOver == false){
-        ship.move();
+        if(ship2.dead == false)ship2.move();
+        if(ship.dead == false)ship.move();
     }
 
     while(asteroids.length < numAsteroids){
@@ -285,13 +409,13 @@ gameStates[1] = function(){
     }
 }
 
-//---Game Over Screen---//!put new code for high score transfer here
+//---Game Over Screen---//put new code for high score transfer here
 gameStates[2] = function(){
     highScoreElements.style.display = "block";
-    console.log(score + " vs " + highScore);
+    //console.log(score + " vs " + highScore);
     if(score > highScore){
         setScore(score);//pass score and name to app.js
-        console.log("High Score:" + score);
+        //console.log("High Score:" + score);
         highScore = score;
         ctx.save();
         ctx.font = "30px Arial";
