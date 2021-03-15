@@ -1,67 +1,43 @@
-var express = require('express');
-var mongoose = require('mongoose');
-var app = express();
-var path = require('path');
-var bodyparser = require('body-parser');//component of express to parse jsons
-//const { Console } = require('console');
-const { EPERM } = require('constants');
-const { request } = require('http');
+var express = require('express')
+const { setFlagsFromString } = require('v8')
+var app = express()
+var mongoose = require('mongoose')
+const { RSA_NO_PADDING } = require('constants')
+var serv = require('http').Server(app)
+var io = require('socket.io')(serv,{})
+var debug = true
+var numAsteroids = 10
+var gameRunning = false
 
-var serv = require('http').Server(app);//refer to server when refering to certain connections
-var io = require('socket.io')(serv,{});
+require('./db')
+require('./models/Player')
 
-//sets up middleware to use in application
-app.use(bodyparser.json());//key value pairs in json obj
-app.use(bodyparser.urlencoded({extended:true}));//all reading of encoded urls
-app.use(express.json());
+var PlayerData = mongoose.model('player')
 
-//makes the connection to the database server
-mongoose.connect('mongodb://localhost:27017/recordEntries', {//connect to mongoose //connect('connection string', {exeptions})
-    useNewUrlParser:true
-}).then(function(){
-    console.log("Connected to MongoDB Database");
-}).catch(function(err){
-    console.log(err);
-});
 
-//load in database templates
-require('./models/Record');//require folder
-var Record = mongoose.model('record');
-
-//example of a POST route
-app.post('/saveRecord', function(req,res){
-    console.log("Request Made");
-    console.log(req.body);
-    new Record(req.body).save().then(function(){
-        if(highScoreServer<req.body.score){
-            highScoreServer = req.body.score;
-            console.log("New High score according to server:" + highScoreServer);
-        }
-        res.redirect('recordlist.html');
-    })
+//File Communication===================================
+app.get('/', function(req,res){
+   // console.log(err)
+    res.sendFile(__dirname+'/client/index.html')
 })
 
-//gets the data for the list
-app.get('/getData',function(req,res){//utilize mongoose commands to grab data //{} = all data //.then = promise
-    Record.find({}).then(function(record){
-        res.json({record})
-    })
+app.use('/client', express.static(__dirname+'/client'))
+
+
+
+
+//server side communiction=========================
+serv.listen(5000,function(){
+    console.log('Connected on localhost 5000')
 })
 
-//postroute to delete record entry
-app.post('/deleteRecord', function(req,res){
-    console.log('Record Deleted', req.body._id);
-    Record.findByIdAndDelete(req.body._id).exec();
-    res.redirect('recordlist.html');
-})
+var SocketList = {}
+//var PlayerList = {}
 
+var randomRange = function(high, low){
+    return Math.random() * ( high - low) + low;
+} 
 
-app.use(express.static(__dirname+"/views"))
-app.listen(5000, function(){//connect to database
-    console.log("Listening on port 5000");
-});
-
-var SocketList = {};
 
 //Class for GameObject
 var GameObject = function(){
@@ -71,144 +47,363 @@ var GameObject = function(){
         spX:0,
         spY:0,
         id:""
-    };
+    }
     
-    self.update = function(){
+    self.update= function(){
         self.updatePosition()
     }
-
     self.updatePosition = function(){
-        self.x += self.spX;
-        self.y += self.spY;
+        self.x += self.spX
+        self.y += self.spY
     }
     self.getDist = function(point){
-        return Math.sqrt(Math.pow(self.x - point.x, 2) + Math.pow(self.y - point.y, 2));//distance formula
+        return Math.sqrt(Math.pow(self.x - point.x,2)+Math.pow(self.y-point.y,2))
     }
-    return self;
+    return self
 }
 
-//add to game object class with new class
-var Player = function(id){//class, similar to constructor
-    var self = GameObject()
-    self.id = id;
-    self.number = Math.floor(Math.random()*10);
-    self.right = false;
-    self.left = false;
-    self.up = false;
-    self.down = false;
-    self.attack = false;
-    self.mouseAngle = 0;
-    self.speed = 10;
+var Player =function(id){
     
-    var playerUpdate = self.update;//inherited from base class
+    var self = GameObject()
+    self.id = id
+    self.number = Math.floor(Math.random()*10)
+    self.right = false
+    self.left = false
+    self.up = false
+    self.down = false
+    self.speed = 10
+    self.hp = 10
+    self.hpMax = 10
+    self.score = 0
+    self.color = "";
+    self.dead = false;
+    
+    var playerUpdate = self.update
 
     self.update = function(){
-        self.updateSpeed();
-        playerUpdate();
+        self.updateSpeed()
+        playerUpdate()
     }
 
     self.updateSpeed = function(){
         if(self.right){
-            self.spX = self.speed;
+            self.spX = self.speed
         }else if(self.left){
             self.spX = -self.speed
-        }else{//prevent acceleration endlessly
-            self.spX = 0;
+        }else{
+            self.spX = 0
         }
 
         if(self.up){
-            self.spY = -self.speed;
+            self.spY = -self.speed
         }else if(self.down){
-            self.spY = self.speed;
-        }else{//prevent acceleration endlessly
-            self.spY = 0;
+            self.spY = self.speed
+        }else{
+            self.spY = 0
         }
     }
 
-    Player.list[id] = self;
+    self.getInitPack = function(){
+        return {
+            id:self.id,
+            x:self.x,
+            y:self.y,
+            number:self.number,
+            hp:self.hp,
+            hpMax:self.hpMax,
+            score:self.score,
+            dead:self.dead
+        }
+    }
 
-    return self;
+    self.getUpdatePack = function(){
+        return {
+            id:self.id,
+            x:self.x,
+            y:self.y,
+            number:self.number,
+            hp:self.hp,
+            score:self.score,
+            dead:self.dead
+        }
+    }
+
+    Player.list[id] = self
+
+    initPack.player.push(self.getInitPack())
+
+    return self
 }
 
-Player.list = {}//= empty json
+Player.list = {}
 
 //list of functions for player connection and movement
 Player.onConnect = function(socket){
-    var player = new Player(socket.id);//instance of player, utlize new x,y
+    
+    var player = new Player(socket.id)
+    
     
     //recieves player input
-    socket.on('keypress', function(data){
+    socket.on('keypress',function(data){
         //console.log(data.state)
         if(data.inputId === 'up')
-            player.up = data.state;
+            player.up = data.state
         if(data.inputId === 'down')
-            player.down = data.state;
+            player.down = data.state
         if(data.inputId === 'left')
-            player.left = data.state;
+            player.left = data.state
         if(data.inputId === 'right')
-            player.right = data.state;
+            player.right = data.state
         if(data.inputId === 'attack')
-            player.attack = data.state;
+            player.attack = data.state
         if(data.inputId === 'mouseAngle')
-            player.mouseAngle = data.state;
-    });
+            player.mouseAngle = data.state
+    })
+
+    socket.emit('init',{
+        player:Player.getAllInitPack(),
+        asteroid:Asteroid.getAllInitPack(),
+    })
+}
+
+Player.getAllInitPack = function(){
+    var players = []
+    for(var i in Player.list){
+        players.push(Player.list[i].getInitPack())
+    }
+    return players
 }
 
 Player.onDisconnect = function(socket){
-    delete Player.list[socket.id];
+    delete Player.list[socket.id]
+    removePack.player.push(socket.id)
 }
 
 Player.update = function(){
-    var pack = [];//collection of each package
-    for (var i in Player.list){
-        var player = Player.list[i];
-        player.update();
+    var pack = []
+   
+    for (var i in Player.list) {
+        var player = Player.list[i]
+        player.update()
+        
         //console.log(player)
-        pack.push({
-            x: player.x,
-            y: player.y,
-            number: player.number,
-            id:player.id
-        })
+        pack.push(player.getUpdatePack())
     }
-
-    return pack;
+    
+    return pack
 }
 
-//!__
-//Connection to game
-io.sockets.on('connection', function(socket){//when connected to socket.io, is opened when someone on client connects to server
-    console.log("Socket Connected");
+var Asteroid = function(){
+    var self = GameObject()
+    self.id = Math.random() 
+    self.x = Math.random() * 800
+    self.y = Math.random() * 600
+    self.spX = 0
+    self.radius = randomRange(15,5)
+    //self.vx = randomRange(-5,-10)
+    self.spY = randomRange(10,5)
+   // self.spY = Math.random() * (10-5) + 5;
+ 
 
-    socket.id = Math.random();//random id, unlikely to be the same
-    //socket.x = 0;
-    //socket.y = Math.floor(Math.random()*600)//random number * canvas height
-    //socket.number = Math.floor(Math.random()*10)//random number * canvas height
-    //add something to socket list
-    SocketList[socket.id] = socket;
+    self.timer = 0
+    self.toRemove = false
+
+    var asteroidUpdate = self.update
+
+    self.update = function(){
+        // if(self.timer++ > 100){
+        //     self.toRemove = true
+        // }
+        if(self.y > 600 + self.radius){
+            self.x = randomRange(800,0)
+            self.y = randomRange(0,-600)
+        }
+        asteroidUpdate()
+    }
+
+    self.getInitPack = function(){
+        return {
+            id:self.id,
+            x:self.x,
+            y:self.y,
+            radius:self.radius,
+            spY:self.spY
+            
+        }
+    }
+
+    self.getUpdatePack = function(){
+        return {
+            id:self.id,
+            x:self.x,
+            y:self.y,
+            radius:self.radius,
+            spY:self.spY
+        }
+    }
+    Asteroid.list[self.id] = self
+
+    initPack.asteroid.push(self.getInitPack())
+    return self
+}
+Asteroid.list = {}
+
+
+
+
+Asteroid.update = function(){
+    var pack = []
+   
+    for (var i in Asteroid.list) {
+        var asteroid = Asteroid.list[i]
+        asteroid.update()
+       /* if(asteroid.toRemove){
+            delete Asteroid.list[i]
+            removePack.asteroid.push(asteroid.id)
+        }
+        else{*/
+           pack.push(asteroid.getUpdatePack()) 
+        //}
+        
+    }
+
+    return pack
+}
+
+Asteroid.getAllInitPack = function(){
+    var asteroids = []
+
+    for(var i in Asteroid.list){
+        asteroids.push(Asteroid.list[i].getInitPack())
+    }
+    return asteroids
+}
+
+var gameStart= function() {
+    //for loop to create all instances of asteroids
+    for (var i = 0; i < numAsteroids; i++) {
+        
+        var asteroid = new Asteroid();
+        //console.log(asteroid)
+    }
+    
+}
+
+
+///====== User Collection setup
+
+var Players = {
+    "Matt":"123",
+    "Rob":"asd",
+    "Ron":"321",
+    "Jay":"ewq",
+}
+
+var isPasswordValid = function(data,cb){
+    PlayerData.findOne({username:data.username},function(err,username){
+            //console.log(username.password, data.password)
+            cb(data.password == username.password)
+    })
+    
+
+    //return Players[data.username] === data.password
+}
+
+var isUsernameTaken = function(data,cb){
+    PlayerData.findOne({username:data.username},function(err,username){
+        if(username == null){
+           cb(false) 
+        }
+        else{
+            cb(true)
+        }
+        
+  })
+   //return Players[data.username]
+}
+
+var addUser = function(data){
+    //Players[data.username] = data.password
+    new PlayerData(data).save()
+
+}
+
+
+//Connection to game
+io.sockets.on('connection', function(socket){
+    console.log("Socket Connected")
+    if(!gameRunning){
+        gameRunning = true
+        gameStart()
+    }
+    socket.id = Math.random()
+   // socket.x = 0
+   // socket.y = Math.floor(Math.random()*600)
+   // socket.number = Math.floor(Math.random()*10)
+    //add something to SocketList
+    SocketList[socket.id] = socket
+    Player.onConnect(socket)
+    socket.emit('connected', socket.id)
     
     //disconnection event
-    socket.on('disconnect', function(){//disconnection
-        delete SocketList[socket.id];
-        Player.onDisconnect(socket);
-    });
+    socket.on('disconnect',function(){
+        delete SocketList[socket.id]
+        Player.onDisconnect(socket)
+    })
 
-    socket.on('evalServer', function(data){
+    //handleing chat event
+    socket.on('sendMessageToServer',function(data){
+        console.log(data)
+       var playerName = (" " + socket.id).slice(2,7)
+       for(var i in SocketList){
+           SocketList[i].emit('addToChat', playerName + ": "+ data)
+       }
+    })
+
+    socket.on('evalServer',function(data){
         if(!debug){
             return
         }
-        var res = eval(data);//evaluate()
+        var res = eval(data)
         socket.emit('evalResponse', res)
-    });
-});
+    })
+    ///Old Examples from Wednesday 1/27
+    // socket.on('sendMsg',function(data){
+    //     console.log(data.message);
+    // })
+    // socket.on('sendBtnMsg',function(data){
+    //     console.log(data.message)
+    // })
 
-//setup update loop
+    // socket.emit('messageFromServer',{
+    //     message:'Hey Jordan Welcome to the party'
+    // })
+})
+
+var initPack = {
+    player:[],
+    asteroid:[]
+}
+
+var removePack = {
+    player:[],
+    asteroid:[]
+}
+
+//Setup Update Loop 
 setInterval(function(){
     var pack = {
         player:Player.update(),
-    };
-    for (var i in SocketList){
-        var socket = SocketList[i];//new local refernce to update previous versions
-        socket.emit('newPositions', pack);
-    };
-}, 1000/30);//code to be executed when run, time in ms
+        asteroid:Asteroid.update()
+    }
+   // console.log(pack.asteroid)
+  // var pack = Player.update();
+    for (var i in SocketList) {
+        var socket = SocketList[i]
+        socket.emit('init',initPack)
+        socket.emit('update',pack)
+        socket.emit('remove',removePack)
+    }
+    initPack.player = []
+    removePack.player = []
+}, 1000/30)
